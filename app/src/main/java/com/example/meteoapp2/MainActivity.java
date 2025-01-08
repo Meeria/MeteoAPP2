@@ -68,6 +68,8 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        
+
         // Rafraîchir la météo pour toutes les villes
         refreshButton.setOnClickListener(new View.OnClickListener() {
             @Override
