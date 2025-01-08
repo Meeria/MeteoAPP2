@@ -43,4 +43,8 @@ dependencies {
     implementation ("com.squareup.okhttp3:okhttp:4.11.0") // Pour les requêtes HTTP
     implementation ("com.google.code.gson:gson:2.10.1")  // Pour parser la réponse JSON
 }
+dependencies {
+    implementation ("com.github.bumptech.glide:glide:4.12.0")
+    annotationProcessor ("com.github.bumptech.glide:compiler:4.12.0")
+}
 

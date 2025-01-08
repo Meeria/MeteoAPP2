@@ -8,12 +8,16 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
-import android.widget.Button;
 import android.widget.EditText;
+import android.widget.Button;
+import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.TextView;
+
+import com.bumptech.glide.Glide;
 
 import org.json.JSONObject;
 
@@ -35,8 +39,8 @@ public class MainActivity extends AppCompatActivity {
     private Button addCityButton, refreshButton;
     private ListView cityListView;
 
-    private ArrayList<String> cityList;
-    private ArrayAdapter<String> cityAdapter;
+    private ArrayList<CityWeather> cityList;
+    private CityAdapter cityAdapter;
     private OkHttpClient client;
 
     @Override
@@ -50,7 +54,7 @@ public class MainActivity extends AppCompatActivity {
         cityListView = findViewById(R.id.cityListView);
 
         cityList = new ArrayList<>();
-        cityAdapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, cityList);
+        cityAdapter = new CityAdapter(this, cityList);
         cityListView.setAdapter(cityAdapter);
 
         client = new OkHttpClient();
@@ -61,21 +65,19 @@ public class MainActivity extends AppCompatActivity {
             public void onClick(View v) {
                 String city = cityInput.getText().toString().trim();
                 if (!city.isEmpty() && !cityList.contains(city)) {
-                    cityList.add(city);
+                    cityList.add(new CityWeather(city)); // Ajoute un objet CityWeather
                     cityAdapter.notifyDataSetChanged();
                     cityInput.setText("");
                 }
             }
         });
 
-        
-
         // Rafraîchir la météo pour toutes les villes
         refreshButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                for (String city : cityList) {
-                    fetchWeather(city);
+                for (CityWeather city : cityList) {
+                    fetchWeather(city.getCityName()); // Récupère la météo pour chaque ville
                 }
             }
         });
@@ -93,7 +95,7 @@ public class MainActivity extends AppCompatActivity {
         cityListView.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener() {
             @Override
             public boolean onItemLongClick(AdapterView<?> parent, View view, int position, long id) {
-                final String oldCity = cityList.get(position);
+                final String oldCity = cityList.get(position).getCityName();
                 final EditText input = new EditText(MainActivity.this);
                 input.setText(oldCity);
 
@@ -105,7 +107,7 @@ public class MainActivity extends AppCompatActivity {
                             public void onClick(DialogInterface dialog, int which) {
                                 String newCity = input.getText().toString().trim();
                                 if (!newCity.isEmpty() && !cityList.contains(newCity)) {
-                                    cityList.set(position, newCity);
+                                    cityList.set(position, new CityWeather(newCity));
                                     cityAdapter.notifyDataSetChanged();
                                 }
                             }
@@ -119,7 +121,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // Récupérer les données météo pour une ville
-    private void fetchWeather(String city) {
+    private void fetchWeather(final String city) {
         String url = BASE_URL + "?q=" + city + ",fr&appid=" + API_KEY + "&units=metric&lang=fr";
 
         Request request = new Request.Builder()
@@ -130,7 +132,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onFailure(Call call, IOException e) {
                 e.printStackTrace();
-                updateUI(city, "Erreur réseau : " + e.getMessage());
+                updateUI(city, "Erreur réseau : " + e.getMessage(), "");
             }
 
             @Override
@@ -142,33 +144,106 @@ public class MainActivity extends AppCompatActivity {
                         String weather = json.getJSONArray("weather")
                                 .getJSONObject(0)
                                 .getString("description");
+                        String iconCode = json.getJSONArray("weather")
+                                .getJSONObject(0)
+                                .getString("icon");  // Récupérer le code d'icône
                         double temperature = json.getJSONObject("main").getDouble("temp");
 
-                        String result = "Météo : " + weather + "\nTempérature : " + temperature + "°C";
-                        updateUI(city, result);
+                        String result = weather + "\n" + "Température : " + temperature + "°C";
+                        updateUI(city, result, iconCode);  // Passer l'icône ici
                     } catch (Exception e) {
                         e.printStackTrace();
-                        updateUI(city, "Erreur lors du traitement des données.");
+                        updateUI(city, "Erreur lors du traitement des données.", "");
                     }
                 } else {
-                    updateUI(city, "Erreur : " + response.message());
+                    updateUI(city, "Erreur : " + response.message(), "");
                 }
             }
         });
     }
 
     // Mettre à jour la liste des villes avec les données météo
-    private void updateUI(final String city, final String weatherInfo) {
+    private void updateUI(final String city, final String weatherInfo, final String iconCode) {
         new Handler(Looper.getMainLooper()).post(new Runnable() {
             @Override
             public void run() {
-                int index = cityList.indexOf(city);
-                if (index != -1) {
-                    String updatedCity = city + " - " + weatherInfo;
-                    cityList.set(index, updatedCity);
-                    cityAdapter.notifyDataSetChanged();
+                for (CityWeather cityWeather : cityList) {
+                    if (cityWeather.getCityName().equals(city)) {
+                        cityWeather.setWeatherDescription(weatherInfo);
+                        cityWeather.setIconCode(iconCode);
+                        cityAdapter.notifyDataSetChanged();
+                        break;
+                    }
                 }
             }
         });
     }
+
+    // Adapter personnalisé pour afficher les villes et leurs données météo
+    public class CityAdapter extends ArrayAdapter<CityWeather> {
+        public CityAdapter(MainActivity context, ArrayList<CityWeather> cities) {
+            super(context, 0, cities);
+        }
+
+        @Override
+        public View getView(int position, View convertView, ViewGroup parent) {
+            if (convertView == null) {
+                convertView = getLayoutInflater().inflate(R.layout.list_item_city, parent, false);
+            }
+
+            CityWeather cityWeather = getItem(position);
+
+            TextView cityName = convertView.findViewById(R.id.cityName);
+            TextView weatherDescription = convertView.findViewById(R.id.weatherDescription);
+            TextView temperature = convertView.findViewById(R.id.temperature);
+            ImageView weatherIcon = convertView.findViewById(R.id.weatherIcon);
+
+            // Remplir les vues avec les données
+            cityName.setText(cityWeather.getCityName());
+            weatherDescription.setText(cityWeather.getWeatherDescription());
+            temperature.setText("");  // Ou mettez ici la température si nécessaire
+
+            String iconCode = cityWeather.getIconCode();
+            if (iconCode != null && !iconCode.isEmpty()) {
+                String iconUrl = "https://openweathermap.org/img/wn/" + iconCode + "@2x.png";
+                Glide.with(getContext())
+                        .load(iconUrl)
+                        .into(weatherIcon);
+            }
+
+            return convertView;
+        }
+    }
+
+    // Classe pour stocker les informations météo d'une ville
+    public class CityWeather {
+        private String cityName;
+        private String weatherDescription;
+        private String iconCode;
+
+        public CityWeather(String cityName) {
+            this.cityName = cityName;
+        }
+
+        public String getCityName() {
+            return cityName;
+        }
+
+        public String getWeatherDescription() {
+            return weatherDescription;
+        }
+
+        public void setWeatherDescription(String weatherDescription) {
+            this.weatherDescription = weatherDescription;
+        }
+
+        public String getIconCode() {
+            return iconCode;
+        }
+
+        public void setIconCode(String iconCode) {
+            this.iconCode = iconCode;
+        }
+    }
 }
+
